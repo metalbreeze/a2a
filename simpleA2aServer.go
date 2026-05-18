@@ -59,9 +59,17 @@ func main() {
 	if apiKey == "" {
 		logger.Warn("OPENAI_API_KEY is not set; the default agent at /a2a will fail to handle tasks")
 	}
+	baseURL := os.Getenv("OPENAI_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.openai.com/v1"
+	}
+	model := os.Getenv("OPENAI_MODEL")
+	if model == "" {
+		model = "gpt-4o-mini"
+	}
 
 	// --- 1) Start the default OpenAI-backed ADK agent on an internal port ---
-	startDefaultAgent(logger, internalPort, publicURL, apiKey)
+	startDefaultAgent(logger, internalPort, publicURL, apiKey, baseURL, model)
 
 	// --- 2) Open broker store + hub ---
 	store, err := broker.NewStore(dbPath)
@@ -127,11 +135,14 @@ func main() {
 	logger.Info("✅ goodbye!")
 }
 
-// startDefaultAgent boots the original ADK OpenAI server on 127.0.0.1:internalPort in the background.
-func startDefaultAgent(logger *zap.Logger, internalPort, publicURL, apiKey string) {
+// startDefaultAgent boots the original ADK OpenAI(-compatible) server on
+// 127.0.0.1:internalPort in the background. baseURL and model are env-driven
+// so the broker can front any OpenAI-compatible endpoint (Azure, OpenRouter,
+// local llama.cpp / vLLM / inference-gateway, etc.).
+func startDefaultAgent(logger *zap.Logger, internalPort, publicURL, apiKey, baseURL, model string) {
 	cfg := config.Config{
 		AgentName:        "broker-default-agent",
-		AgentDescription: "Default OpenAI-backed agent on the broker",
+		AgentDescription: "Default OpenAI-compatible agent on the broker",
 		AgentVersion:     "0.3.0",
 		Debug:            false,
 		QueueConfig:      config.QueueConfig{CleanupInterval: 5 * time.Minute},
@@ -140,8 +151,8 @@ func startDefaultAgent(logger *zap.Logger, internalPort, publicURL, apiKey strin
 
 	agentCfg := &config.AgentConfig{
 		Provider:                    "openai",
-		Model:                       "gpt-4o-mini",
-		BaseURL:                     "https://api.openai.com/v1",
+		Model:                       model,
+		BaseURL:                     baseURL,
 		APIKey:                      apiKey,
 		Timeout:                     60 * time.Second,
 		MaxRetries:                  2,
